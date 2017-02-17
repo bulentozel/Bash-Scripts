@@ -1,4 +1,4 @@
-#!/bin/sh
+#!/bin/bash
 # Author: Bulent Ozel bulent.ozel@gmail.com
 # Sample code snippets on how to manage running processes
 # on a machine with multiple processors. This has been developed mainly to run
@@ -17,15 +17,20 @@ run_a_process()
 run_EURACE_model()
 {
     JOBPATH=$1
+
     BASEDIR=$(dirname "${JOBPATH}")
 
     MODELEXE="./$(basename "${JOBPATH}")"
 
     cd $BASEDIR
-    INITXML=$(find . -name *.xml)
+    INITXML=$(find . -name *init.xml)
     INITXML="./$(basename "${INITXML}")"
+ 
+    simfile="${BASEDIR}/log_seed_runtime.txt"
 
-    $MODELEXE $NITER $INITXML -f $XMLOUTF > log.txt &
+
+    FFLAG="-f"
+    wine $MODELEXE $NITER $INITXML $FFLAG $XMLOUTF > $simfile &
     PID=$!
     echo $PID
 }
@@ -63,6 +68,7 @@ run_sims()
     runningQ=("${!2}")
     MAX_RUN=$3
 
+
     # This case should not be observed under normal conditions.
     if [ $MAX_RUN -eq 0 ]; then
         echo ${runningQ[@]}
@@ -73,6 +79,8 @@ run_sims()
     # Get the number of running seeds:
     nRQ=${#runningQ[@]}
     echo "Queue: $nWQ - Running: $nRQ" >&2
+    echo "Queue: $nWQ - Running: $nRQ" >> $LOGFILE
+    echo "" >> $LOGFILE
 
     if [ $nWQ -eq 0 ]; then
         echo ${runningQ[@]}
@@ -106,39 +114,29 @@ run_sims()
 }
 
 
-
-echo "\nConfiguring EURACE experiment set-up ...\n"
-echo "Collecting experiment inputs ...\n"
+echo
+echo "Configuring EURACE experiment set-up ..."
+echo
+echo "Collecting experiment inputs ..."
+echo
 
 # $1: Root folder of the experiment:
 if [ -z $1 ]; then
-    ROOTFOLDER=/Users/bulentozel/Models/Simulations
+    ROOTFOLDER=/home/superuser/EURACE/simulation/exp2
 else
     ROOTFOLDER=$1
 fi
 
 # $2: Number of parallel runs
 if [ -z $2 ]; then
-    MAXRUN=2
+    MAXRUN=64
 else
     MAXRUN=$2
 fi
 
-NPROCS=`getconf _NPROCESSORS_ONLN`
-echo "\nThis host machine has $NPROCS processors."
-
-echo "Number of parallel runs that has been given is $MAXRUN.\n"
-
-echo "Enter a new nummber if you want to change (or RETURN to skip)"
-read X
-if [ -n "$X" ]; then
-    MAXRUN=$X
-    echo "The number of parallel runs is changed to $MAXRUN."
-fi
-
 # $3: Number of iterations at each run.
 if [ -z $3 ]; then
-    NITER=240
+    NITER=2400
 else
     NITER=$3
 fi
@@ -148,18 +146,23 @@ fi
 if [ -z $4 ]; then
     XMLOUTF=`expr $NITER + 1`
 else
-    XMLTOUTF=$4
+    XMLOUTF=$4
 fi
 
-LOGFILE="$ROOTFOLDER/seeds.txt"
+LOGFILE="$ROOTFOLDER/log_experiment_runtime.txt"
+LOGFILE_EXE="$ROOTFOLDER/log_seeds_list.txt"
 
-echo $LOGFILE
 
-find  $ROOTFOLDER -name *.exe > $LOGFILE
+echo "The list of jobs/executables found:" > $LOGFILE
+echo "" >> $LOGFILE
+
+find  $ROOTFOLDER -name *.exe >> $LOGFILE
+find  $ROOTFOLDER -name *.exe > $LOGFILE_EXE
 
 WAITING=()
-echo "The location of seeds are:\n"
-for path in `cat $LOGFILE`
+echo "The location of seeds are:"
+echo
+for path in `cat $LOGFILE_EXE`
 do
     WAITING+=($path)
     echo $path
@@ -167,7 +170,28 @@ done
 RUNNING=()
 
 
-echo "\nRunning Monte Carlo experiments with EURACE Model ...\n"
+
+NPROCS=`getconf _NPROCESSORS_ONLN`
+echo
+echo "This host machine has $NPROCS processors."
+echo "The given number of seeds is ${#WAITING[@]}."
+echo "The given number of parallel runs is $MAXRUN."
+echo
+
+
+echo "Enter a new number if you want to change the number of parallel runs (or RETURN to skip)"
+read X
+if [ -n "$X" ]; then
+    MAXRUN=$X
+    echo
+    echo "The number of parallel runs is changed to $MAXRUN."
+fi
+
+
+
+echo
+echo "Running Monte Carlo experiments with EURACE Model ..."
+echo
 
 
 SECONDS=0
@@ -175,13 +199,15 @@ RESULT=`run_sims WAITING[@] RUNNING[@] $MAXRUN`
 # RESULT is a string. Converting it into an array.
 IFS=' ' read -r -a RUNNING <<< "$RESULT"
 
-echo "\nThe PIDs of running simulations:"
+echo
+echo "The PIDs of running simulations:"
 # Checking both index and element.
 for ind in "${!RUNNING[@]}"
 do
     echo "$ind ${RUNNING[ind]}"
 done
 
+echo
 echo "Waiting for the remaining simulations to be completed:"
 
 
@@ -205,7 +231,14 @@ do
 done
 
 
-echo "\nThe experiment is finished successfully in $SECONDS seconds. Enjoy analyzing your results!.\n"
+echo
+echo "The experiment is finished successfully in $SECONDS seconds. Enjoy analyzing your results!."
+echo
+
+echo "" >> $LOGFILE
+echo "Total Simulation Time in Seconds: $SECONDS" >> $LOGFILE
+echo "" >> $LOGFILE
+
 
 
 
